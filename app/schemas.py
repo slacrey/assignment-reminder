@@ -127,3 +127,18 @@ class AssignmentRead(BaseModel):
     status: str
     created_at: str
     updated_at: str
+
+
+class ReminderLogRead(BaseModel):
+    id: int
+    assignment_id: int
+    child_id: int
+    child_name: str
+    target_qq: str
+    assignment_title: str
+    message: str
+    scheduled_at: str
+    sent_at: str
+    status: str
+    error_message: str | None
+    created_at: str

@@ -1,19 +1,28 @@
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
+import logging
 from pathlib import Path
 import sqlite3
 
 from fastapi import APIRouter, Request
 
 from app.database import connect
+from app.schemas import ReminderLogRead
 
 
 router = APIRouter(prefix="/api/reminder-logs", tags=["reminder-logs"])
+logger = logging.getLogger(__name__)
 
 
-def _now_iso(now: datetime | None = None) -> str:
+def _local_now_iso(now: datetime | None = None) -> str:
     value = now or datetime.now()
+    if value.tzinfo is not None:
+        value = value.astimezone().replace(tzinfo=None)
     return value.replace(microsecond=0).isoformat()
+
+
+def _audit_now_iso() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _database_path(request: Request) -> Path:
@@ -82,12 +91,12 @@ def _insert_failed_log(
 
 
 def process_due_reminders(database_path: str | Path, now: datetime | None = None) -> int:
-    now_iso = _now_iso(now)
+    now_iso = _local_now_iso(now)
     processed = 0
 
     for assignment in _due_assignments(database_path, now_iso):
         message = ""
-        sent_at = now_iso
+        sent_at = _audit_now_iso()
         try:
             message = build_message(
                 assignment["child_name"],
@@ -138,12 +147,15 @@ def process_due_reminders(database_path: str | Path, now: datetime | None = None
 
 async def run_reminder_loop(database_path: str | Path, interval_seconds: int = 30) -> None:
     while True:
-        process_due_reminders(database_path)
+        try:
+            process_due_reminders(database_path)
+        except Exception:
+            logger.exception("Reminder scan failed")
         await asyncio.sleep(interval_seconds)
 
 
-@router.get("")
-def list_reminder_logs(request: Request) -> list[dict[str, object]]:
+@router.get("", response_model=list[ReminderLogRead])
+def list_reminder_logs(request: Request) -> list[ReminderLogRead]:
     with connect(_database_path(request)) as connection:
         rows = connection.execute(
             """
@@ -167,4 +179,4 @@ def list_reminder_logs(request: Request) -> list[dict[str, object]]:
             """
         ).fetchall()
 
-    return [dict(row) for row in rows]
+    return [ReminderLogRead.model_validate(dict(row)) for row in rows]
