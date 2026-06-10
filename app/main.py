@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
+from app.children import router as children_router
 from app.database import init_db
 
 
@@ -20,6 +21,8 @@ def create_app(database_path: str | Path | None = None, start_scheduler: bool = 
     @app.get("/api/health")
     def health_check() -> dict[str, str]:
         return {"status": "ok"}
+
+    app.include_router(children_router)
 
     return app
 
