@@ -44,11 +44,11 @@
           <form id="child-form" class="compact-form" novalidate>
             <label>
               <span>姓名</span>
-              <input id="child-name" name="name" autocomplete="off" required>
+            <input id="child-name" name="name" autocomplete="off" aria-describedby="child-form-message" required>
             </label>
             <label>
               <span>QQ</span>
-              <input id="child-qq" name="qq_number" inputmode="numeric" pattern="[0-9]+" autocomplete="off" required>
+              <input id="child-qq" name="qq_number" inputmode="numeric" pattern="[0-9]+" autocomplete="off" aria-describedby="child-form-message" required>
             </label>
             <button type="submit">添加孩子</button>
             <p id="child-form-message" class="form-message" role="status" hidden></p>
@@ -82,21 +82,21 @@
           <form id="assignment-form" class="compact-form assignment-form" novalidate>
             <label>
               <span>孩子</span>
-              <select id="assignment-child" name="child_id" required>
+              <select id="assignment-child" name="child_id" aria-describedby="assignment-form-message" required>
                 <option value="">先添加孩子</option>
               </select>
             </label>
             <label>
               <span>标题</span>
-              <input id="assignment-title" name="title" autocomplete="off" required>
+              <input id="assignment-title" name="title" autocomplete="off" aria-describedby="assignment-form-message" required>
             </label>
             <label class="wide-field">
               <span>说明</span>
-              <textarea id="assignment-description" name="description" rows="2"></textarea>
+              <textarea id="assignment-description" name="description" rows="2" aria-describedby="assignment-form-message"></textarea>
             </label>
             <label>
               <span>提醒时间</span>
-              <input id="assignment-remind-at" name="remind_at" type="datetime-local" required>
+              <input id="assignment-remind-at" name="remind_at" type="datetime-local" aria-describedby="assignment-form-message" required>
             </label>
             <button type="submit">添加作业</button>
             <p id="assignment-form-message" class="form-message" role="status" hidden></p>

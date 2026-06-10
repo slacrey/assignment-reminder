@@ -41,3 +41,8 @@ def test_root_serves_management_page(tmp_path):
 
     assert response.status_code == 200
     assert "催孩子写作业" in response.text
+    assert 'href="/static/styles.css"' in response.text
+    assert 'src="/static/app.js"' in response.text
+
+    assert client.get("/static/styles.css").status_code == 200
+    assert client.get("/static/app.js").status_code == 200

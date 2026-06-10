@@ -91,17 +91,20 @@ async function loadReminderLogs() {
 async function createChild(event) {
   event.preventDefault();
   clearFormMessage(nodes.childFormMessage);
+  clearInvalid(nodes.childName, nodes.childQq);
 
   const name = nodes.childName.value.trim();
   const qqNumber = nodes.childQq.value.trim();
 
   if (!name) {
     showFormMessage(nodes.childFormMessage, "请输入姓名。", "error");
+    markInvalid(nodes.childName);
     nodes.childName.focus();
     return;
   }
   if (!/^[0-9]+$/.test(qqNumber)) {
     showFormMessage(nodes.childFormMessage, "QQ 只能填写数字。", "error");
+    markInvalid(nodes.childQq);
     nodes.childQq.focus();
     return;
   }
@@ -114,6 +117,7 @@ async function createChild(event) {
       body: JSON.stringify({ name, qq_number: qqNumber }),
     });
     nodes.childForm.reset();
+    clearInvalid(nodes.childName, nodes.childQq);
     showFormMessage(nodes.childFormMessage, "已添加孩子。", "success");
     await Promise.allSettled([loadChildren(), loadAssignments()]);
   } catch (error) {
@@ -126,6 +130,11 @@ async function createChild(event) {
 async function createAssignment(event) {
   event.preventDefault();
   clearFormMessage(nodes.assignmentFormMessage);
+  clearInvalid(
+    nodes.assignmentChild,
+    nodes.assignmentTitle,
+    nodes.assignmentRemindAt,
+  );
 
   const childId = Number(nodes.assignmentChild.value);
   const title = nodes.assignmentTitle.value.trim();
@@ -134,16 +143,19 @@ async function createAssignment(event) {
 
   if (!childId) {
     showFormMessage(nodes.assignmentFormMessage, "请选择孩子。", "error");
+    markInvalid(nodes.assignmentChild);
     nodes.assignmentChild.focus();
     return;
   }
   if (!title) {
     showFormMessage(nodes.assignmentFormMessage, "请输入作业标题。", "error");
+    markInvalid(nodes.assignmentTitle);
     nodes.assignmentTitle.focus();
     return;
   }
   if (!remindAt) {
     showFormMessage(nodes.assignmentFormMessage, "请选择提醒时间。", "error");
+    markInvalid(nodes.assignmentRemindAt);
     nodes.assignmentRemindAt.focus();
     return;
   }
@@ -163,6 +175,7 @@ async function createAssignment(event) {
     nodes.assignmentTitle.value = "";
     nodes.assignmentDescription.value = "";
     setDefaultReminderTime();
+    clearInvalid(nodes.assignmentChild, nodes.assignmentTitle, nodes.assignmentRemindAt);
     showFormMessage(nodes.assignmentFormMessage, "已添加作业。", "success");
     await Promise.allSettled([loadAssignments(), loadChildren()]);
   } catch (error) {
@@ -397,6 +410,14 @@ function setFormBusy(form, busy) {
   form.querySelectorAll("button, input, select, textarea").forEach((control) => {
     control.disabled = busy;
   });
+}
+
+function markInvalid(control) {
+  control.setAttribute("aria-invalid", "true");
+}
+
+function clearInvalid(...controls) {
+  controls.forEach((control) => control.removeAttribute("aria-invalid"));
 }
 
 function apiErrorMessage(payload, status) {
