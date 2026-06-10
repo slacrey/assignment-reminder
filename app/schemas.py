@@ -1,9 +1,11 @@
 import re
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 class ChildBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     qq_number: str
 
@@ -29,6 +31,8 @@ class ChildCreate(ChildBase):
 
 
 class ChildUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = None
     qq_number: str | None = None
 
