@@ -2,11 +2,18 @@ from pathlib import Path
 import sqlite3
 
 
+class ClosingConnection(sqlite3.Connection):
+    def __exit__(self, exc_type, exc_value, traceback):
+        result = super().__exit__(exc_type, exc_value, traceback)
+        self.close()
+        return result
+
+
 def connect(database_path: str | Path) -> sqlite3.Connection:
     database_path = Path(database_path)
     database_path.parent.mkdir(parents=True, exist_ok=True)
 
-    connection = sqlite3.connect(database_path)
+    connection = sqlite3.connect(database_path, factory=ClosingConnection)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     return connection
