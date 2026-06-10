@@ -107,7 +107,10 @@ class AssignmentCreate(BaseModel):
     @field_validator("remind_at")
     @classmethod
     def validate_remind_at(cls, value: datetime) -> datetime:
-        now = datetime.now(value.tzinfo) if value.tzinfo else datetime.now()
+        if value.tzinfo is not None:
+            raise ValueError("remind_at must use local time without a timezone")
+        value = value.replace(microsecond=0)
+        now = datetime.now()
         if value <= now:
             raise ValueError("remind_at must be in the future")
         return value

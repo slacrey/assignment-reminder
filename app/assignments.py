@@ -117,26 +117,26 @@ def create_assignment(payload: AssignmentCreate, request: Request) -> Assignment
 def cancel_assignment(assignment_id: int, request: Request) -> AssignmentRead:
     now = _now_iso()
     with connect(_database_path(request)) as connection:
-        existing = _fetch_assignment(connection, assignment_id)
-        if existing is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Assignment not found",
-            )
-        if existing["status"] != "pending":
+        result = connection.execute(
+            """
+            UPDATE assignments
+            SET status = 'cancelled', updated_at = ?
+            WHERE id = ? AND status = 'pending'
+            """,
+            (now, assignment_id),
+        )
+        if result.rowcount == 0:
+            existing = _fetch_assignment(connection, assignment_id)
+            if existing is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Assignment not found",
+                )
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Assignment is not pending",
             )
 
-        connection.execute(
-            """
-            UPDATE assignments
-            SET status = 'cancelled', updated_at = ?
-            WHERE id = ?
-            """,
-            (now, assignment_id),
-        )
         row = _fetch_assignment(connection, assignment_id)
 
     if row is None:

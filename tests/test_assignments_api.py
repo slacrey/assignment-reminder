@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 
+from app.database import connect
 from app.main import create_app
 
 
@@ -37,6 +38,24 @@ def test_create_assignment(tmp_path):
 
     assert response.status_code == 201
     assert response.json()["status"] == "pending"
+    assert response.json()["title"] == "数学练习"
+
+
+def test_create_assignment_trims_title(tmp_path):
+    with make_client(tmp_path) as client:
+        child = create_child(client)
+        response = client.post(
+            "/api/assignments",
+            json={
+                "child_id": child["id"],
+                "title": " 数学练习 ",
+                "description": "",
+                "remind_at": future_time(),
+            },
+        )
+
+    assert response.status_code == 201
+    assert response.json()["title"] == "数学练习"
 
 
 def test_create_assignment_defaults_missing_description(tmp_path):
@@ -112,6 +131,22 @@ def test_create_assignment_rejects_date_without_time(tmp_path):
                 "title": "数学练习",
                 "description": "",
                 "remind_at": "2026-06-11",
+            },
+        )
+
+    assert response.status_code == 422
+
+
+def test_create_assignment_rejects_timezone_offset(tmp_path):
+    with make_client(tmp_path) as client:
+        child = create_child(client)
+        response = client.post(
+            "/api/assignments",
+            json={
+                "child_id": child["id"],
+                "title": "数学练习",
+                "description": "",
+                "remind_at": f"{future_time()}+08:00",
             },
         )
 
@@ -206,3 +241,40 @@ def test_cancel_rejects_non_pending_assignment(tmp_path):
         response = client.patch(f"/api/assignments/{assignment['id']}/cancel")
 
     assert response.status_code == 409
+
+
+def test_cancel_missing_assignment_returns_not_found(tmp_path):
+    with make_client(tmp_path) as client:
+        response = client.patch("/api/assignments/999/cancel")
+
+    assert response.status_code == 404
+
+
+def test_cancel_does_not_overwrite_assignment_that_stopped_being_pending(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+    app = create_app(database_path=database_path, start_scheduler=False)
+
+    with TestClient(app) as client:
+        child = create_child(client)
+        create_response = client.post(
+            "/api/assignments",
+            json={
+                "child_id": child["id"],
+                "title": "数学练习",
+                "description": "",
+                "remind_at": future_time(),
+            },
+        )
+        assignment_id = create_response.json()["id"]
+
+        with connect(database_path) as connection:
+            connection.execute(
+                "UPDATE assignments SET status = 'reminded' WHERE id = ?",
+                (assignment_id,),
+            )
+
+        response = client.patch(f"/api/assignments/{assignment_id}/cancel")
+        assignments = client.get("/api/assignments").json()
+
+    assert response.status_code == 409
+    assert assignments[0]["status"] == "reminded"
