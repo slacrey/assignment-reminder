@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
+from app.assignments import router as assignments_router
 from app.children import router as children_router
 from app.database import init_db
 
@@ -23,6 +24,7 @@ def create_app(database_path: str | Path | None = None, start_scheduler: bool = 
         return {"status": "ok"}
 
     app.include_router(children_router)
+    app.include_router(assignments_router)
 
     return app
 
