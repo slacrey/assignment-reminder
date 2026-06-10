@@ -4,9 +4,10 @@ import sqlite3
 
 class ClosingConnection(sqlite3.Connection):
     def __exit__(self, exc_type, exc_value, traceback):
-        result = super().__exit__(exc_type, exc_value, traceback)
-        self.close()
-        return result
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
 
 
 def connect(database_path: str | Path) -> sqlite3.Connection:
