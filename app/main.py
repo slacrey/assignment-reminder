@@ -5,12 +5,17 @@ from contextlib import suppress
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.assignments import router as assignments_router
 from app.children import router as children_router
 from app.database import init_db
 from app.reminders import router as reminders_router
 from app.reminders import run_reminder_loop
+
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 def create_app(database_path: str | Path | None = None, start_scheduler: bool = True) -> FastAPI:
@@ -36,6 +41,12 @@ def create_app(database_path: str | Path | None = None, start_scheduler: bool = 
     @app.get("/api/health")
     def health_check() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/", include_in_schema=False)
+    def management_page() -> FileResponse:
+        return FileResponse(STATIC_DIR / "index.html")
+
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     app.include_router(children_router)
     app.include_router(assignments_router)

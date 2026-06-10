@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>催孩子写作业</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">本地管理台</p>
+          <h1>催孩子写作业</h1>
+        </div>
+        <dl class="status-strip" aria-label="当前状态">
+          <div>
+            <dt>孩子</dt>
+            <dd id="children-count">0</dd>
+          </div>
+          <div>
+            <dt>待提醒</dt>
+            <dd id="pending-count">0</dd>
+          </div>
+          <div>
+            <dt>日志</dt>
+            <dd id="logs-count">0</dd>
+          </div>
+          <div>
+            <dt>更新</dt>
+            <dd id="last-updated">--</dd>
+          </div>
+        </dl>
+      </header>
+
+      <main class="workspace" aria-label="作业提醒管理">
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>孩子</h2>
+            <p id="children-status" class="section-status" role="status"></p>
+          </div>
+
+          <form id="child-form" class="compact-form" novalidate>
+            <label>
+              <span>姓名</span>
+              <input id="child-name" name="name" autocomplete="off" required>
+            </label>
+            <label>
+              <span>QQ</span>
+              <input id="child-qq" name="qq_number" inputmode="numeric" pattern="[0-9]+" autocomplete="off" required>
+            </label>
+            <button type="submit">添加孩子</button>
+            <p id="child-form-message" class="form-message" role="status" hidden></p>
+          </form>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">姓名</th>
+                  <th scope="col">QQ</th>
+                  <th scope="col">作业数</th>
+                  <th scope="col">上次提醒</th>
+                </tr>
+              </thead>
+              <tbody id="children-list">
+                <tr class="empty-row">
+                  <td colspan="4">暂无孩子</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>新作业</h2>
+            <p id="assignment-form-status" class="section-status" role="status"></p>
+          </div>
+
+          <form id="assignment-form" class="compact-form assignment-form" novalidate>
+            <label>
+              <span>孩子</span>
+              <select id="assignment-child" name="child_id" required>
+                <option value="">先添加孩子</option>
+              </select>
+            </label>
+            <label>
+              <span>标题</span>
+              <input id="assignment-title" name="title" autocomplete="off" required>
+            </label>
+            <label class="wide-field">
+              <span>说明</span>
+              <textarea id="assignment-description" name="description" rows="2"></textarea>
+            </label>
+            <label>
+              <span>提醒时间</span>
+              <input id="assignment-remind-at" name="remind_at" type="datetime-local" required>
+            </label>
+            <button type="submit">添加作业</button>
+            <p id="assignment-form-message" class="form-message" role="status" hidden></p>
+          </form>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-heading">
+            <h2>作业</h2>
+            <p id="assignments-status" class="section-status" role="status"></p>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">孩子</th>
+                  <th scope="col">标题</th>
+                  <th scope="col">说明</th>
+                  <th scope="col">提醒时间</th>
+                  <th scope="col">状态</th>
+                  <th scope="col">操作</th>
+                </tr>
+              </thead>
+              <tbody id="assignments-list">
+                <tr class="empty-row">
+                  <td colspan="6">暂无作业</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-heading">
+            <h2>提醒日志</h2>
+            <p id="logs-status" class="section-status" role="status"></p>
+          </div>
+
+          <div class="table-wrap log-table">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">发送时间</th>
+                  <th scope="col">孩子</th>
+                  <th scope="col">QQ</th>
+                  <th scope="col">作业</th>
+                  <th scope="col">状态</th>
+                  <th scope="col">消息</th>
+                </tr>
+              </thead>
+              <tbody id="reminder-logs">
+                <tr class="empty-row">
+                  <td colspan="6">暂无日志</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

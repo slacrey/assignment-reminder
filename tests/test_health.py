@@ -31,3 +31,13 @@ def test_app_startup_initializes_database(tmp_path):
         ).fetchall()
 
     assert [row["name"] for row in rows] == ["assignments", "children", "reminder_logs"]
+
+
+def test_root_serves_management_page(tmp_path):
+    app = create_app(database_path=tmp_path / "test.sqlite3", start_scheduler=False)
+
+    with TestClient(app) as client:
+        response = client.get("/")
+
+    assert response.status_code == 200
+    assert "催孩子写作业" in response.text
