@@ -97,6 +97,8 @@ class AssignmentCreate(BaseModel):
     def parse_remind_at(cls, value: object) -> datetime:
         if not isinstance(value, str):
             raise ValueError("remind_at must be an ISO datetime")
+        if "T" not in value and " " not in value:
+            raise ValueError("remind_at must include a time")
         try:
             return datetime.fromisoformat(value)
         except ValueError as error:

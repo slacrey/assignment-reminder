@@ -102,6 +102,22 @@ def test_create_assignment_rejects_past_reminder_time(tmp_path):
     assert response.status_code == 422
 
 
+def test_create_assignment_rejects_date_without_time(tmp_path):
+    with make_client(tmp_path) as client:
+        child = create_child(client)
+        response = client.post(
+            "/api/assignments",
+            json={
+                "child_id": child["id"],
+                "title": "数学练习",
+                "description": "",
+                "remind_at": "2026-06-11",
+            },
+        )
+
+    assert response.status_code == 422
+
+
 def test_create_assignment_rejects_unknown_fields(tmp_path):
     with make_client(tmp_path) as client:
         child = create_child(client)
