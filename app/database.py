@@ -1,0 +1,57 @@
+from pathlib import Path
+import sqlite3
+
+
+def connect(database_path: str | Path) -> sqlite3.Connection:
+    database_path = Path(database_path)
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+
+    connection = sqlite3.connect(database_path)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
+    return connection
+
+
+def init_db(database_path: str | Path) -> None:
+    with connect(database_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS children (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              qq_number TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS assignments (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              child_id INTEGER NOT NULL REFERENCES children(id),
+              title TEXT NOT NULL,
+              description TEXT NOT NULL DEFAULT '',
+              remind_at TEXT NOT NULL,
+              status TEXT NOT NULL CHECK (status IN ('pending', 'reminded', 'cancelled')),
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS reminder_logs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              assignment_id INTEGER NOT NULL REFERENCES assignments(id),
+              child_id INTEGER NOT NULL REFERENCES children(id),
+              target_qq TEXT NOT NULL,
+              message TEXT NOT NULL,
+              scheduled_at TEXT NOT NULL,
+              sent_at TEXT NOT NULL,
+              status TEXT NOT NULL CHECK (status IN ('success', 'failed')),
+              error_message TEXT,
+              created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_assignments_status_remind_at
+            ON assignments (status, remind_at);
+
+            CREATE INDEX IF NOT EXISTS idx_reminder_logs_created_at
+            ON reminder_logs (created_at);
+            """
+        )
