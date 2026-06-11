@@ -60,3 +60,4 @@ data/assignment_reminder.sqlite3
 4. 等待后台扫描。
 5. 确认作业状态变为“已提醒”。
 6. 确认提醒日志出现模拟 QQ 消息。
+# assignment-reminder-codebuddy
