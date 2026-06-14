@@ -145,3 +145,23 @@ def cancel_assignment(assignment_id: int, request: Request) -> AssignmentRead:
             detail="Assignment not found",
         )
     return _serialize_assignment(row)
+
+
+@router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_assignment(assignment_id: int, request: Request) -> None:
+    with connect(_database_path(request)) as connection:
+        existing = connection.execute(
+            "SELECT id FROM assignments WHERE id = ?",
+            (assignment_id,),
+        ).fetchone()
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Assignment not found",
+            )
+
+        connection.execute(
+            "DELETE FROM reminder_logs WHERE assignment_id = ?",
+            (assignment_id,),
+        )
+        connection.execute("DELETE FROM assignments WHERE id = ?", (assignment_id,))

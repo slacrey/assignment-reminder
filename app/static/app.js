@@ -11,10 +11,28 @@ document.addEventListener("DOMContentLoaded", () => {
   bindNodes();
   nodes.childForm.addEventListener("submit", createChild);
   nodes.assignmentForm.addEventListener("submit", createAssignment);
-  nodes.assignmentsList.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-cancel-id]");
+  nodes.childrenList.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-delete-child-id]");
     if (button) {
-      cancelAssignment(Number(button.dataset.cancelId));
+      deleteChild(Number(button.dataset.deleteChildId), button.dataset.childName || "");
+    }
+  });
+  nodes.assignmentsList.addEventListener("click", (event) => {
+    const cancelButton = event.target.closest("[data-cancel-id]");
+    if (cancelButton) {
+      cancelAssignment(Number(cancelButton.dataset.cancelId));
+      return;
+    }
+
+    const deleteButton = event.target.closest("[data-delete-assignment-id]");
+    if (deleteButton) {
+      deleteAssignment(Number(deleteButton.dataset.deleteAssignmentId));
+    }
+  });
+  nodes.reminderLogs.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-delete-log-id]");
+    if (button) {
+      deleteReminderLog(Number(button.dataset.deleteLogId));
     }
   });
   setDefaultReminderTime();
@@ -205,6 +223,76 @@ async function cancelAssignment(id) {
   }
 }
 
+async function deleteAssignment(id) {
+  if (!window.confirm("删除这个作业？相关提醒日志也会一起删除。")) {
+    return;
+  }
+
+  const button = document.querySelector(`[data-delete-assignment-id="${id}"]`);
+  if (button) {
+    button.disabled = true;
+    button.textContent = "删除中";
+  }
+
+  try {
+    await fetchJson(`/api/assignments/${id}`, { method: "DELETE" });
+    await refreshAll();
+  } catch (error) {
+    setSectionStatus(nodes.assignmentsStatus, `删除失败：${error.message}`, "error");
+    if (button) {
+      button.disabled = false;
+      button.textContent = "删除";
+    }
+  }
+}
+
+async function deleteChild(id, name) {
+  const label = name ? `“${name}”` : "这个孩子";
+  if (!window.confirm(`删除${label}？相关作业和提醒日志也会一起删除。`)) {
+    return;
+  }
+
+  const button = document.querySelector(`[data-delete-child-id="${id}"]`);
+  if (button) {
+    button.disabled = true;
+    button.textContent = "删除中";
+  }
+
+  try {
+    await fetchJson(`/api/children/${id}`, { method: "DELETE" });
+    await refreshAll();
+  } catch (error) {
+    setSectionStatus(nodes.childrenStatus, `删除失败：${error.message}`, "error");
+    if (button) {
+      button.disabled = false;
+      button.textContent = "删除";
+    }
+  }
+}
+
+async function deleteReminderLog(id) {
+  if (!window.confirm("删除这条提醒记录？")) {
+    return;
+  }
+
+  const button = document.querySelector(`[data-delete-log-id="${id}"]`);
+  if (button) {
+    button.disabled = true;
+    button.textContent = "删除中";
+  }
+
+  try {
+    await fetchJson(`/api/reminder-logs/${id}`, { method: "DELETE" });
+    await Promise.allSettled([loadReminderLogs(), loadChildren()]);
+  } catch (error) {
+    setSectionStatus(nodes.logsStatus, `删除失败：${error.message}`, "error");
+    if (button) {
+      button.disabled = false;
+      button.textContent = "删除";
+    }
+  }
+}
+
 async function refreshAll() {
   if (state.isRefreshing) {
     return;
@@ -247,7 +335,7 @@ async function fetchJson(url, options = {}) {
 
 function renderChildren() {
   if (state.children.length === 0) {
-    nodes.childrenList.innerHTML = emptyRow("暂无孩子", 4);
+    nodes.childrenList.innerHTML = emptyRow("暂无孩子", 5);
     return;
   }
 
@@ -257,6 +345,14 @@ function renderChildren() {
       <td class="nowrap">${escapeHtml(child.qq_number)}</td>
       <td>${child.assignment_count}</td>
       <td class="cell-muted">${formatDate(child.last_reminded_at)}</td>
+      <td>
+        <button
+          class="ghost-button"
+          type="button"
+          data-delete-child-id="${child.id}"
+          data-child-name="${escapeHtml(child.name)}"
+        >删除</button>
+      </td>
     </tr>
   `).join("");
 }
@@ -293,9 +389,19 @@ function renderAssignments() {
 
   nodes.assignmentsList.innerHTML = state.assignments.map((assignment) => {
     const canCancel = assignment.status === "pending";
-    const action = canCancel
+    const cancelAction = canCancel
       ? `<button class="ghost-button" type="button" data-cancel-id="${assignment.id}">取消</button>`
-      : '<span class="cell-muted">--</span>';
+      : "";
+    const action = `
+      <div class="action-group">
+        ${cancelAction}
+        <button
+          class="ghost-button"
+          type="button"
+          data-delete-assignment-id="${assignment.id}"
+        >删除</button>
+      </div>
+    `;
 
     return `
       <tr>
@@ -315,7 +421,7 @@ function renderAssignments() {
 
 function renderReminderLogs() {
   if (state.logs.length === 0) {
-    nodes.reminderLogs.innerHTML = emptyRow("暂无日志", 7);
+    nodes.reminderLogs.innerHTML = emptyRow("暂无日志", 8);
     return;
   }
 
@@ -331,6 +437,13 @@ function renderReminderLogs() {
         ${log.provider_message_id ? `<span class="cell-muted">#${escapeHtml(log.provider_message_id)}</span>` : ""}
       </td>
       <td class="message-cell">${escapeHtml(log.error_message || log.message)}</td>
+      <td>
+        <button
+          class="ghost-button"
+          type="button"
+          data-delete-log-id="${log.id}"
+        >删除</button>
+      </td>
     </tr>
   `).join("");
 }

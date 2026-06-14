@@ -136,3 +136,30 @@ def update_child(child_id: int, payload: ChildUpdate, request: Request) -> Child
             detail="Child not found",
         )
     return _serialize_child(row)
+
+
+@router.delete("/{child_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_child(child_id: int, request: Request) -> None:
+    with connect(_database_path(request)) as connection:
+        existing = connection.execute(
+            "SELECT id FROM children WHERE id = ?",
+            (child_id,),
+        ).fetchone()
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Child not found",
+            )
+
+        connection.execute(
+            """
+            DELETE FROM reminder_logs
+            WHERE child_id = ?
+               OR assignment_id IN (
+                 SELECT id FROM assignments WHERE child_id = ?
+               )
+            """,
+            (child_id, child_id),
+        )
+        connection.execute("DELETE FROM assignments WHERE child_id = ?", (child_id,))
+        connection.execute("DELETE FROM children WHERE id = ?", (child_id,))

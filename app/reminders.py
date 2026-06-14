@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 import sqlite3
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request, status
 
 from app.database import connect
 from app.qq_sender import SendMessageRequest
@@ -34,7 +34,7 @@ def _database_path(request: Request) -> Path:
 def build_message(child_name: str, title: str, description: str) -> str:
     message = f"{child_name}，现在该写{title}了"
     if description:
-        message = f"{message}，{description}。"
+        message = f"{message}，{description}"
     return f"{message}。"
 
 
@@ -319,3 +319,17 @@ def list_reminder_logs(request: Request) -> list[ReminderLogRead]:
         ).fetchall()
 
     return [ReminderLogRead.model_validate(dict(row)) for row in rows]
+
+
+@router.delete("/{log_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_reminder_log(log_id: int, request: Request) -> None:
+    with connect(_database_path(request)) as connection:
+        result = connection.execute(
+            "DELETE FROM reminder_logs WHERE id = ?",
+            (log_id,),
+        )
+        if result.rowcount == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Reminder log not found",
+            )

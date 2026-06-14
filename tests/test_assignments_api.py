@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.database import connect
 from app.main import create_app
+from app.reminders import process_due_reminders
 
 
 def make_client(tmp_path):
@@ -278,3 +279,41 @@ def test_cancel_does_not_overwrite_assignment_that_stopped_being_pending(tmp_pat
 
     assert response.status_code == 409
     assert assignments[0]["status"] == "reminded"
+
+
+def test_delete_assignment_removes_related_reminder_logs_but_keeps_child(tmp_path):
+    with make_client(tmp_path) as client:
+        child = create_child(client)
+        create_response = client.post(
+            "/api/assignments",
+            json={
+                "child_id": child["id"],
+                "title": "数学练习",
+                "description": "",
+                "remind_at": future_time(),
+            },
+        )
+        assignment = create_response.json()
+        with connect(client.app.state.database_path) as connection:
+            connection.execute(
+                "UPDATE assignments SET remind_at = ? WHERE id = ?",
+                (past_time(), assignment["id"]),
+            )
+        process_due_reminders(client.app.state.database_path)
+        assert client.get("/api/reminder-logs").json()
+
+        response = client.delete(f"/api/assignments/{assignment['id']}")
+
+        assert response.status_code == 204
+        assert client.get("/api/assignments").json() == []
+        assert client.get("/api/reminder-logs").json() == []
+        children = client.get("/api/children").json()
+        assert len(children) == 1
+        assert children[0]["id"] == child["id"]
+
+
+def test_delete_assignment_returns_not_found(tmp_path):
+    with make_client(tmp_path) as client:
+        response = client.delete("/api/assignments/999")
+
+    assert response.status_code == 404

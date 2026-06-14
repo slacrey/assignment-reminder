@@ -335,6 +335,31 @@ def test_process_due_reminders_does_not_repeat(tmp_path):
     assert len(logs) == 1
 
 
+def test_delete_reminder_log_removes_log_only(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        assignment = create_due_assignment(client)
+        force_assignment_due(app.state.database_path, assignment["id"])
+        process_due_reminders(app.state.database_path)
+        log = client.get("/api/reminder-logs").json()[0]
+
+        response = client.delete(f"/api/reminder-logs/{log['id']}")
+
+        assert response.status_code == 204
+        assert client.get("/api/reminder-logs").json() == []
+        assert client.get("/api/assignments").json()[0]["status"] == "reminded"
+
+
+def test_delete_reminder_log_returns_not_found(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.delete("/api/reminder-logs/999")
+
+    assert response.status_code == 404
+
+
 def test_process_due_reminders_records_failure_and_continues(tmp_path, monkeypatch):
     app = make_app(tmp_path)
 
