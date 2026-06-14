@@ -129,6 +129,44 @@ def test_onebot_sender_reports_failed_response():
     assert "retcode=100" in result.error_message
 
 
+def test_onebot_sender_reports_non_object_json_response():
+    server = onebot_server(response_body=["ok"])
+    try:
+        sender = OneBotHttpSender(
+            base_url=f"http://127.0.0.1:{server.server_port}",
+            access_token=None,
+            timeout_seconds=1,
+        )
+
+        result = sender.send(request())
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert result.success is False
+    assert result.provider == "onebot"
+    assert "unexpected JSON shape" in result.error_message
+
+
+def test_onebot_sender_reports_non_object_data_on_success():
+    server = onebot_server(response_body={"status": "ok", "data": []})
+    try:
+        sender = OneBotHttpSender(
+            base_url=f"http://127.0.0.1:{server.server_port}",
+            access_token=None,
+            timeout_seconds=1,
+        )
+
+        result = sender.send(request())
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert result.success is False
+    assert result.provider == "onebot"
+    assert "unexpected data shape" in result.error_message
+
+
 def test_create_sender_defaults_to_simulated(monkeypatch):
     monkeypatch.delenv("QQ_SENDER", raising=False)
 

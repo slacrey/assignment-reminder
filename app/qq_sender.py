@@ -82,6 +82,13 @@ class OneBotHttpSender:
                 error_message="OneBot returned invalid JSON",
             )
 
+        if not isinstance(data, dict):
+            return SendMessageResult(
+                provider=self.provider,
+                success=False,
+                error_message="OneBot returned unexpected JSON shape",
+            )
+
         if data.get("status") != "ok":
             retcode = data.get("retcode")
             wording = data.get("wording") or data.get("message") or "unknown error"
@@ -94,7 +101,17 @@ class OneBotHttpSender:
                 ),
             )
 
-        message_id = (data.get("data") or {}).get("message_id")
+        response_data = {}
+        if "data" in data:
+            response_data = data["data"]
+            if not isinstance(response_data, dict):
+                return SendMessageResult(
+                    provider=self.provider,
+                    success=False,
+                    error_message="OneBot returned unexpected data shape",
+                )
+
+        message_id = response_data.get("message_id")
         return SendMessageResult(
             provider=self.provider,
             success=True,
