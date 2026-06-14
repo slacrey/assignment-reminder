@@ -138,6 +138,84 @@ def test_schema_enforces_assignment_status_check(tmp_path):
             raise AssertionError("invalid assignment status should fail")
 
 
+def test_schema_allows_internal_sending_assignment_status(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+    init_db(database_path)
+
+    with connect(database_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO children (name, qq_number, created_at, updated_at)
+            VALUES ('小明', '123456', '2026-06-10T10:00:00', '2026-06-10T10:00:00')
+            """
+        )
+        child_id = connection.execute("SELECT id FROM children").fetchone()["id"]
+        connection.execute(
+            """
+            INSERT INTO assignments (
+              child_id, title, description, remind_at, status, created_at, updated_at
+            )
+            VALUES (?, '数学练习', '', '2026-06-10T11:00:00', 'sending',
+                    '2026-06-10T10:00:00', '2026-06-10T10:00:00')
+            """,
+            (child_id,),
+        )
+        status = connection.execute("SELECT status FROM assignments").fetchone()["status"]
+
+    assert status == "sending"
+
+
+def test_init_db_migrates_existing_assignments_status_check_for_sending(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.executescript(
+            """
+            PRAGMA foreign_keys = ON;
+
+            CREATE TABLE children (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              qq_number TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE assignments (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              child_id INTEGER NOT NULL REFERENCES children(id),
+              title TEXT NOT NULL,
+              description TEXT NOT NULL DEFAULT '',
+              remind_at TEXT NOT NULL,
+              status TEXT NOT NULL CHECK (status IN ('pending', 'reminded', 'cancelled')),
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            INSERT INTO children (name, qq_number, created_at, updated_at)
+            VALUES ('小明', '123456', '2026-06-10T10:00:00', '2026-06-10T10:00:00');
+
+            INSERT INTO assignments (
+              child_id, title, description, remind_at, status, created_at, updated_at
+            )
+            VALUES (1, '数学练习', '', '2026-06-10T11:00:00', 'pending',
+                    '2026-06-10T10:00:00', '2026-06-10T10:00:00');
+            """
+        )
+
+    init_db(database_path)
+
+    with connect(database_path) as connection:
+        connection.execute(
+            "UPDATE assignments SET status = 'sending' WHERE title = '数学练习'"
+        )
+        row = connection.execute(
+            "SELECT child_id, title, status FROM assignments"
+        ).fetchone()
+
+    assert dict(row) == {"child_id": 1, "title": "数学练习", "status": "sending"}
+    assert "idx_assignments_status_remind_at" in index_names(database_path, "assignments")
+
+
 def test_schema_enforces_foreign_keys(tmp_path):
     database_path = tmp_path / "test.sqlite3"
     init_db(database_path)

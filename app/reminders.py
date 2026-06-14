@@ -96,6 +96,127 @@ def _insert_failed_log(
         )
 
 
+def _claim_assignment(database_path: str | Path, assignment_id: int, updated_at: str) -> bool:
+    with connect(database_path) as connection:
+        result = connection.execute(
+            """
+            UPDATE assignments
+            SET status = 'sending', updated_at = ?
+            WHERE id = ? AND status = 'pending'
+            """,
+            (updated_at, assignment_id),
+        )
+        return result.rowcount == 1
+
+
+def _record_success(
+    database_path: str | Path,
+    assignment: sqlite3.Row,
+    message: str,
+    sent_at: str,
+    provider: str,
+    provider_message_id: str | None,
+) -> bool:
+    with connect(database_path) as connection:
+        result = connection.execute(
+            """
+            UPDATE assignments
+            SET status = 'reminded', updated_at = ?
+            WHERE id = ? AND status = 'sending'
+            """,
+            (sent_at, assignment["id"]),
+        )
+        if result.rowcount != 1:
+            return False
+
+        connection.execute(
+            """
+            INSERT INTO reminder_logs (
+              assignment_id, child_id, target_qq, message, scheduled_at,
+              sent_at, provider, provider_message_id, status, error_message, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'success', NULL, ?)
+            """,
+            (
+                assignment["id"],
+                assignment["child_id"],
+                assignment["target_qq"],
+                message,
+                assignment["remind_at"],
+                sent_at,
+                provider,
+                provider_message_id,
+                sent_at,
+            ),
+        )
+        return True
+
+
+def _record_failure(
+    database_path: str | Path,
+    assignment: sqlite3.Row,
+    message: str,
+    sent_at: str,
+    provider: str,
+    provider_message_id: str | None,
+    error_message: str,
+) -> None:
+    with connect(database_path) as connection:
+        connection.execute(
+            """
+            UPDATE assignments
+            SET status = 'pending', updated_at = ?
+            WHERE id = ? AND status = 'sending'
+            """,
+            (sent_at, assignment["id"]),
+        )
+        connection.execute(
+            """
+            INSERT INTO reminder_logs (
+              assignment_id, child_id, target_qq, message, scheduled_at,
+              sent_at, provider, provider_message_id, status, error_message, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?)
+            """,
+            (
+                assignment["id"],
+                assignment["child_id"],
+                assignment["target_qq"],
+                message,
+                assignment["remind_at"],
+                sent_at,
+                provider,
+                provider_message_id,
+                error_message,
+                sent_at,
+            ),
+        )
+
+
+def _restore_pending(database_path: str | Path, assignment_id: int, updated_at: str) -> None:
+    with connect(database_path) as connection:
+        connection.execute(
+            """
+            UPDATE assignments
+            SET status = 'pending', updated_at = ?
+            WHERE id = ? AND status = 'sending'
+            """,
+            (updated_at, assignment_id),
+        )
+
+
+def _mark_reminded(database_path: str | Path, assignment_id: int, updated_at: str) -> None:
+    with connect(database_path) as connection:
+        connection.execute(
+            """
+            UPDATE assignments
+            SET status = 'reminded', updated_at = ?
+            WHERE id = ? AND status = 'sending'
+            """,
+            (updated_at, assignment_id),
+        )
+
+
 def process_due_reminders(
     database_path: str | Path, now: datetime | None = None, sender=None
 ) -> int:
@@ -106,6 +227,10 @@ def process_due_reminders(
     for assignment in _due_assignments(database_path, now_iso):
         message = ""
         sent_at = _audit_now_iso()
+        send_result = None
+        if not _claim_assignment(database_path, assignment["id"], sent_at):
+            continue
+
         try:
             message = build_message(
                 assignment["child_name"],
@@ -119,7 +244,7 @@ def process_due_reminders(
                 )
             )
             if not send_result.success:
-                _insert_failed_log(
+                _record_failure(
                     database_path,
                     assignment,
                     message,
@@ -130,51 +255,43 @@ def process_due_reminders(
                 )
                 continue
 
-            with connect(database_path) as connection:
-                result = connection.execute(
-                    """
-                    UPDATE assignments
-                    SET status = 'reminded', updated_at = ?
-                    WHERE id = ? AND status = 'pending'
-                    """,
-                    (sent_at, assignment["id"]),
-                )
-                if result.rowcount != 1:
-                    continue
-
-                connection.execute(
-                    """
-                    INSERT INTO reminder_logs (
-                      assignment_id, child_id, target_qq, message, scheduled_at,
-                      sent_at, provider, provider_message_id, status, error_message, created_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'success', NULL, ?)
-                    """,
-                    (
-                        assignment["id"],
-                        assignment["child_id"],
-                        assignment["target_qq"],
-                        message,
-                        assignment["remind_at"],
-                        sent_at,
-                        send_result.provider,
-                        send_result.provider_message_id,
-                        sent_at,
-                    ),
-                )
+            if not _record_success(
+                database_path,
+                assignment,
+                message,
+                sent_at,
+                send_result.provider,
+                send_result.provider_message_id,
+            ):
+                _mark_reminded(database_path, assignment["id"], sent_at)
+                continue
         except Exception as error:
+            provider = getattr(sender, "provider", "unknown")
+            provider_message_id = None
+            if send_result is not None:
+                provider = send_result.provider
+                provider_message_id = send_result.provider_message_id
+            if send_result is not None and send_result.success:
+                try:
+                    _mark_reminded(database_path, assignment["id"], sent_at)
+                except Exception:
+                    pass
+                continue
             try:
-                _insert_failed_log(
+                _record_failure(
                     database_path,
                     assignment,
                     message,
                     sent_at,
-                    getattr(sender, "provider", "unknown"),
-                    None,
+                    provider,
+                    provider_message_id,
                     str(error),
                 )
             except Exception:
-                pass
+                try:
+                    _restore_pending(database_path, assignment["id"], sent_at)
+                except Exception:
+                    pass
             continue
 
         processed += 1

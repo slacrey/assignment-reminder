@@ -38,7 +38,7 @@ def init_db(database_path: str | Path) -> None:
               title TEXT NOT NULL,
               description TEXT NOT NULL DEFAULT '',
               remind_at TEXT NOT NULL,
-              status TEXT NOT NULL CHECK (status IN ('pending', 'reminded', 'cancelled')),
+              status TEXT NOT NULL CHECK (status IN ('pending', 'sending', 'reminded', 'cancelled')),
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -65,6 +65,7 @@ def init_db(database_path: str | Path) -> None:
             ON reminder_logs (created_at);
             """
         )
+        _ensure_assignments_sending_status(connection)
         _ensure_column(
             connection,
             "reminder_logs",
@@ -72,6 +73,45 @@ def init_db(database_path: str | Path) -> None:
             "TEXT NOT NULL DEFAULT 'simulated'",
         )
         _ensure_column(connection, "reminder_logs", "provider_message_id", "TEXT")
+
+
+def _ensure_assignments_sending_status(connection: sqlite3.Connection) -> None:
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'assignments'"
+    ).fetchone()
+    if row is None or "'sending'" in row["sql"]:
+        return
+
+    connection.executescript(
+        """
+        PRAGMA foreign_keys = OFF;
+
+        CREATE TABLE assignments_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          child_id INTEGER NOT NULL REFERENCES children(id),
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          remind_at TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'sending', 'reminded', 'cancelled')),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        INSERT INTO assignments_new (
+          id, child_id, title, description, remind_at, status, created_at, updated_at
+        )
+        SELECT id, child_id, title, description, remind_at, status, created_at, updated_at
+        FROM assignments;
+
+        DROP TABLE assignments;
+        ALTER TABLE assignments_new RENAME TO assignments;
+
+        PRAGMA foreign_keys = ON;
+
+        CREATE INDEX IF NOT EXISTS idx_assignments_status_remind_at
+        ON assignments (status, remind_at);
+        """
+    )
 
 
 def _ensure_column(

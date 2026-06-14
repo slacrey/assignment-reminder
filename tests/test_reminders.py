@@ -23,6 +23,36 @@ class FakeSender:
         return self.result
 
 
+class StatusObservingSender:
+    provider = "fake"
+
+    def __init__(self, database_path, assignment_id):
+        self.database_path = database_path
+        self.assignment_id = assignment_id
+        self.status_seen = None
+        self.requests = []
+
+    def send(self, request):
+        self.requests.append(request)
+        with connect(self.database_path) as connection:
+            self.status_seen = connection.execute(
+                "SELECT status FROM assignments WHERE id = ?",
+                (self.assignment_id,),
+            ).fetchone()["status"]
+        return SendMessageResult(provider="onebot", success=True, provider_message_id="abc-123")
+
+
+class RaisingSender:
+    provider = "onebot"
+
+    def __init__(self):
+        self.requests = []
+
+    def send(self, request):
+        self.requests.append(request)
+        raise RuntimeError("OneBot exploded")
+
+
 REMINDER_LOG_KEYS = {
     "id",
     "assignment_id",
@@ -68,6 +98,14 @@ def force_assignment_due(database_path, assignment_id):
             (due_at, assignment_id),
         )
         connection.commit()
+
+
+def assignment_statuses(database_path):
+    with connect(database_path) as connection:
+        return [
+            row["status"]
+            for row in connection.execute("SELECT status FROM assignments ORDER BY id").fetchall()
+        ]
 
 
 def test_build_message_omits_empty_description():
@@ -129,6 +167,51 @@ def test_process_due_reminders_uses_configured_sender(tmp_path):
     assert logs[0]["provider_message_id"] == "abc-123"
 
 
+def test_process_due_reminders_claims_assignment_before_sending(tmp_path):
+    app = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        assignment = create_due_assignment(client)
+        force_assignment_due(app.state.database_path, assignment["id"])
+        sender = StatusObservingSender(app.state.database_path, assignment["id"])
+
+        processed = process_due_reminders(app.state.database_path, sender=sender)
+        assignments = client.get("/api/assignments").json()
+
+    assert processed == 1
+    assert sender.status_seen == "sending"
+    assert assignments[0]["status"] == "reminded"
+
+
+def test_process_due_reminders_does_not_send_stale_claimed_assignment(tmp_path, monkeypatch):
+    app = make_app(tmp_path)
+    sender = FakeSender(SendMessageResult(provider="onebot", success=True))
+
+    with TestClient(app) as client:
+        assignment = create_due_assignment(client)
+        force_assignment_due(app.state.database_path, assignment["id"])
+        stale_rows = reminders._due_assignments(
+            app.state.database_path,
+            reminders._local_now_iso(),
+        )
+        with connect(app.state.database_path) as connection:
+            connection.execute(
+                "UPDATE assignments SET status = 'cancelled' WHERE id = ?",
+                (assignment["id"],),
+            )
+
+        monkeypatch.setattr(reminders, "_due_assignments", lambda database_path, now_iso: stale_rows)
+
+        processed = process_due_reminders(app.state.database_path, sender=sender)
+        logs = client.get("/api/reminder-logs").json()
+        assignments = client.get("/api/assignments").json()
+
+    assert processed == 0
+    assert sender.requests == []
+    assert logs == []
+    assert assignments[0]["status"] == "cancelled"
+
+
 def test_process_due_reminders_keeps_assignment_pending_when_sender_fails(tmp_path):
     app = make_app(tmp_path)
     sender = FakeSender(
@@ -152,6 +235,27 @@ def test_process_due_reminders_keeps_assignment_pending_when_sender_fails(tmp_pa
     assert logs[0]["status"] == "failed"
     assert logs[0]["provider"] == "onebot"
     assert logs[0]["error_message"] == "OneBot request failed"
+    assert "sending" not in assignment_statuses(app.state.database_path)
+
+
+def test_process_due_reminders_restores_pending_when_sender_raises(tmp_path):
+    app = make_app(tmp_path)
+    sender = RaisingSender()
+
+    with TestClient(app) as client:
+        assignment = create_due_assignment(client)
+        force_assignment_due(app.state.database_path, assignment["id"])
+
+        processed = process_due_reminders(app.state.database_path, sender=sender)
+        logs = client.get("/api/reminder-logs").json()
+        assignments = client.get("/api/assignments").json()
+
+    assert processed == 0
+    assert assignments[0]["status"] == "pending"
+    assert logs[0]["status"] == "failed"
+    assert logs[0]["provider"] == "onebot"
+    assert logs[0]["error_message"] == "OneBot exploded"
+    assert "sending" not in assignment_statuses(app.state.database_path)
 
 
 def test_process_due_reminders_does_not_repeat(tmp_path):
