@@ -63,39 +63,6 @@ def _due_assignments(database_path: str | Path, now_iso: str) -> list[sqlite3.Ro
         ).fetchall()
 
 
-def _insert_failed_log(
-    database_path: str | Path,
-    assignment: sqlite3.Row,
-    message: str,
-    sent_at: str,
-    provider: str,
-    provider_message_id: str | None,
-    error_message: str,
-) -> None:
-    with connect(database_path) as connection:
-        connection.execute(
-            """
-            INSERT INTO reminder_logs (
-              assignment_id, child_id, target_qq, message, scheduled_at,
-              sent_at, provider, provider_message_id, status, error_message, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?)
-            """,
-            (
-                assignment["id"],
-                assignment["child_id"],
-                assignment["target_qq"],
-                message,
-                assignment["remind_at"],
-                sent_at,
-                provider,
-                provider_message_id,
-                error_message,
-                sent_at,
-            ),
-        )
-
-
 def _claim_assignment(database_path: str | Path, assignment_id: int, updated_at: str) -> bool:
     with connect(database_path) as connection:
         result = connection.execute(
