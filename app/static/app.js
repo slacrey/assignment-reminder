@@ -306,7 +306,7 @@ function renderAssignments() {
 
 function renderReminderLogs() {
   if (state.logs.length === 0) {
-    nodes.reminderLogs.innerHTML = emptyRow("暂无日志", 6);
+    nodes.reminderLogs.innerHTML = emptyRow("暂无日志", 7);
     return;
   }
 
@@ -317,6 +317,10 @@ function renderReminderLogs() {
       <td class="nowrap">${escapeHtml(log.target_qq)}</td>
       <td>${escapeHtml(log.assignment_title)}</td>
       <td>${statusBadge(log.status)}</td>
+      <td class="cell-muted">
+        ${escapeHtml(log.provider || "--")}
+        ${log.provider_message_id ? `<span class="cell-muted">#${escapeHtml(log.provider_message_id)}</span>` : ""}
+      </td>
       <td class="message-cell">${escapeHtml(log.error_message || log.message)}</td>
     </tr>
   `).join("");
