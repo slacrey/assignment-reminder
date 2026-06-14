@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import suppress
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
@@ -96,6 +96,15 @@ def force_assignment_due(database_path, assignment_id):
         connection.execute(
             "UPDATE assignments SET remind_at = ? WHERE id = ?",
             (due_at, assignment_id),
+        )
+        connection.commit()
+
+
+def force_assignment_sending(database_path, assignment_id, updated_at):
+    with connect(database_path) as connection:
+        connection.execute(
+            "UPDATE assignments SET status = 'sending', updated_at = ? WHERE id = ?",
+            (updated_at, assignment_id),
         )
         connection.commit()
 
@@ -210,6 +219,55 @@ def test_process_due_reminders_does_not_send_stale_claimed_assignment(tmp_path, 
     assert sender.requests == []
     assert logs == []
     assert assignments[0]["status"] == "cancelled"
+
+
+def test_process_due_reminders_recovers_stale_sending_assignment(tmp_path):
+    app = make_app(tmp_path)
+    sender = FakeSender(
+        SendMessageResult(
+            provider="onebot",
+            success=True,
+            provider_message_id="abc-123",
+        )
+    )
+    old_updated_at = (
+        datetime.now(UTC) - timedelta(minutes=10)
+    ).replace(microsecond=0).isoformat()
+
+    with TestClient(app) as client:
+        assignment = create_due_assignment(client)
+        force_assignment_due(app.state.database_path, assignment["id"])
+        force_assignment_sending(app.state.database_path, assignment["id"], old_updated_at)
+
+        processed = process_due_reminders(app.state.database_path, sender=sender)
+        logs = client.get("/api/reminder-logs").json()
+        assignments = client.get("/api/assignments").json()
+
+    assert processed == 1
+    assert len(sender.requests) == 1
+    assert assignments[0]["status"] == "reminded"
+    assert logs[0]["status"] == "success"
+    assert logs[0]["provider_message_id"] == "abc-123"
+
+
+def test_process_due_reminders_does_not_recover_fresh_sending_assignment(tmp_path):
+    app = make_app(tmp_path)
+    sender = FakeSender(SendMessageResult(provider="onebot", success=True))
+    fresh_updated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+
+    with TestClient(app) as client:
+        assignment = create_due_assignment(client)
+        force_assignment_due(app.state.database_path, assignment["id"])
+        force_assignment_sending(app.state.database_path, assignment["id"], fresh_updated_at)
+
+        processed = process_due_reminders(app.state.database_path, sender=sender)
+        logs = client.get("/api/reminder-logs").json()
+        assignments = client.get("/api/assignments").json()
+
+    assert processed == 0
+    assert sender.requests == []
+    assert logs == []
+    assert assignments[0]["status"] == "sending"
 
 
 def test_process_due_reminders_keeps_assignment_pending_when_sender_fails(tmp_path):

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import logging
 from pathlib import Path
 import sqlite3
@@ -61,6 +61,19 @@ def _due_assignments(database_path: str | Path, now_iso: str) -> list[sqlite3.Ro
             """,
             (now_iso,),
         ).fetchall()
+
+
+def _recover_stale_sending_assignments(database_path: str | Path, cutoff_iso: str) -> None:
+    with connect(database_path) as connection:
+        connection.execute(
+            """
+            UPDATE assignments
+            SET status = 'pending', updated_at = ?
+            WHERE status = 'sending'
+              AND updated_at <= ?
+            """,
+            (cutoff_iso, cutoff_iso),
+        )
 
 
 def _claim_assignment(database_path: str | Path, assignment_id: int, updated_at: str) -> bool:
@@ -189,6 +202,10 @@ def process_due_reminders(
 ) -> int:
     sender = sender or create_sender()
     now_iso = _local_now_iso(now)
+    stale_sending_cutoff = (
+        datetime.now(UTC) - timedelta(minutes=5)
+    ).replace(microsecond=0).isoformat()
+    _recover_stale_sending_assignments(database_path, stale_sending_cutoff)
     processed = 0
 
     for assignment in _due_assignments(database_path, now_iso):
