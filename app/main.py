@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from app.assignments import router as assignments_router
 from app.children import router as children_router
 from app.database import init_db
+from app.qq_sender import create_sender
 from app.reminders import router as reminders_router
 from app.reminders import run_reminder_loop
 
@@ -22,9 +23,12 @@ def create_app(database_path: str | Path | None = None, start_scheduler: bool = 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         init_db(app.state.database_path)
+        app.state.qq_sender = create_sender()
         reminder_task: asyncio.Task[None] | None = None
         if app.state.start_scheduler:
-            reminder_task = asyncio.create_task(run_reminder_loop(app.state.database_path))
+            reminder_task = asyncio.create_task(
+                run_reminder_loop(app.state.database_path, sender=app.state.qq_sender)
+            )
 
         try:
             yield

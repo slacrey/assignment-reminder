@@ -7,6 +7,8 @@ import sqlite3
 from fastapi import APIRouter, Request
 
 from app.database import connect
+from app.qq_sender import SendMessageRequest
+from app.qq_sender import create_sender
 from app.schemas import ReminderLogRead
 
 
@@ -65,8 +67,10 @@ def _insert_failed_log(
     database_path: str | Path,
     assignment: sqlite3.Row,
     message: str,
-    error: Exception,
     sent_at: str,
+    provider: str,
+    provider_message_id: str | None,
+    error_message: str,
 ) -> None:
     with connect(database_path) as connection:
         connection.execute(
@@ -84,15 +88,18 @@ def _insert_failed_log(
                 message,
                 assignment["remind_at"],
                 sent_at,
-                "simulated",
-                None,
-                str(error),
+                provider,
+                provider_message_id,
+                error_message,
                 sent_at,
             ),
         )
 
 
-def process_due_reminders(database_path: str | Path, now: datetime | None = None) -> int:
+def process_due_reminders(
+    database_path: str | Path, now: datetime | None = None, sender=None
+) -> int:
+    sender = sender or create_sender()
     now_iso = _local_now_iso(now)
     processed = 0
 
@@ -105,6 +112,24 @@ def process_due_reminders(database_path: str | Path, now: datetime | None = None
                 assignment["title"],
                 assignment["description"],
             )
+            send_result = sender.send(
+                SendMessageRequest(
+                    target_qq=assignment["target_qq"],
+                    message=message,
+                )
+            )
+            if not send_result.success:
+                _insert_failed_log(
+                    database_path,
+                    assignment,
+                    message,
+                    sent_at,
+                    send_result.provider,
+                    send_result.provider_message_id,
+                    send_result.error_message or "send failed",
+                )
+                continue
+
             with connect(database_path) as connection:
                 result = connection.execute(
                     """
@@ -132,14 +157,22 @@ def process_due_reminders(database_path: str | Path, now: datetime | None = None
                         message,
                         assignment["remind_at"],
                         sent_at,
-                        "simulated",
-                        None,
+                        send_result.provider,
+                        send_result.provider_message_id,
                         sent_at,
                     ),
                 )
         except Exception as error:
             try:
-                _insert_failed_log(database_path, assignment, message, error, sent_at)
+                _insert_failed_log(
+                    database_path,
+                    assignment,
+                    message,
+                    sent_at,
+                    getattr(sender, "provider", "unknown"),
+                    None,
+                    str(error),
+                )
             except Exception:
                 pass
             continue
@@ -149,10 +182,12 @@ def process_due_reminders(database_path: str | Path, now: datetime | None = None
     return processed
 
 
-async def run_reminder_loop(database_path: str | Path, interval_seconds: int = 30) -> None:
+async def run_reminder_loop(
+    database_path: str | Path, interval_seconds: int = 30, sender=None
+) -> None:
     while True:
         try:
-            process_due_reminders(database_path)
+            process_due_reminders(database_path, sender=sender)
         except Exception:
             logger.exception("Reminder scan failed")
         await asyncio.sleep(interval_seconds)

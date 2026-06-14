@@ -7,7 +7,20 @@ from fastapi.testclient import TestClient
 import app.reminders as reminders
 from app.database import connect
 from app.main import create_app
+from app.qq_sender import SendMessageResult
 from app.reminders import process_due_reminders
+
+
+class FakeSender:
+    provider = "fake"
+
+    def __init__(self, result):
+        self.result = result
+        self.requests = []
+
+    def send(self, request):
+        self.requests.append(request)
+        return self.result
 
 
 REMINDER_LOG_KEYS = {
@@ -90,6 +103,57 @@ def test_process_due_reminders_marks_assignment_and_writes_log(tmp_path):
     assert "数学练习" in logs[0]["message"]
 
 
+def test_process_due_reminders_uses_configured_sender(tmp_path):
+    app = make_app(tmp_path)
+    sender = FakeSender(
+        SendMessageResult(
+            provider="onebot",
+            success=True,
+            provider_message_id="abc-123",
+        )
+    )
+
+    with TestClient(app) as client:
+        assignment = create_due_assignment(client)
+        force_assignment_due(app.state.database_path, assignment["id"])
+
+        processed = process_due_reminders(app.state.database_path, sender=sender)
+        logs = client.get("/api/reminder-logs").json()
+        assignments = client.get("/api/assignments").json()
+
+    assert processed == 1
+    assert assignments[0]["status"] == "reminded"
+    assert sender.requests[0].target_qq == "123456"
+    assert "数学练习" in sender.requests[0].message
+    assert logs[0]["provider"] == "onebot"
+    assert logs[0]["provider_message_id"] == "abc-123"
+
+
+def test_process_due_reminders_keeps_assignment_pending_when_sender_fails(tmp_path):
+    app = make_app(tmp_path)
+    sender = FakeSender(
+        SendMessageResult(
+            provider="onebot",
+            success=False,
+            error_message="OneBot request failed",
+        )
+    )
+
+    with TestClient(app) as client:
+        assignment = create_due_assignment(client)
+        force_assignment_due(app.state.database_path, assignment["id"])
+
+        processed = process_due_reminders(app.state.database_path, sender=sender)
+        logs = client.get("/api/reminder-logs").json()
+        assignments = client.get("/api/assignments").json()
+
+    assert processed == 0
+    assert assignments[0]["status"] == "pending"
+    assert logs[0]["status"] == "failed"
+    assert logs[0]["provider"] == "onebot"
+    assert logs[0]["error_message"] == "OneBot request failed"
+
+
 def test_process_due_reminders_does_not_repeat(tmp_path):
     app = make_app(tmp_path)
 
@@ -140,7 +204,7 @@ def test_run_reminder_loop_continues_after_scan_error(tmp_path, monkeypatch):
         calls = 0
         second_call = asyncio.Event()
 
-        def flaky_process_due_reminders(database_path):
+        def flaky_process_due_reminders(database_path, sender=None):
             nonlocal calls
             calls += 1
             if calls == 1:
