@@ -112,10 +112,17 @@ class OneBotHttpSender:
                 )
 
         message_id = response_data.get("message_id")
+        if message_id is None:
+            return SendMessageResult(
+                provider=self.provider,
+                success=False,
+                error_message="OneBot returned success without message_id",
+            )
+
         return SendMessageResult(
             provider=self.provider,
             success=True,
-            provider_message_id=str(message_id) if message_id is not None else None,
+            provider_message_id=str(message_id),
         )
 
 
