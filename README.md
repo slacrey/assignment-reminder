@@ -12,7 +12,7 @@
 
 ## 暂不支持
 
-- 真实 QQ 登录或真实 QQ 消息发送。
+- 真实 QQ 登录。
 - 家长账号、登录鉴权、多用户隔离。
 - 公网部署、多设备同步。
 - 重复提醒、完成确认、催促升级。
@@ -35,6 +35,33 @@ uv run pytest
 ```bash
 uv run uvicorn app.main:app --reload
 ```
+
+## 真实 QQ 发送
+
+默认使用模拟发送，不会访问 QQ：
+
+```bash
+uv run uvicorn app.main:app --reload
+```
+
+要发送真实 QQ 私聊消息，先启动一个兼容 OneBot v11 HTTP API 的本地 QQ 网关，例如 NapCat 或 Lagrange。然后设置：
+
+```bash
+QQ_SENDER=onebot \
+ONEBOT_BASE_URL=http://127.0.0.1:3000 \
+uv run uvicorn app.main:app --reload
+```
+
+如果网关配置了 access token：
+
+```bash
+QQ_SENDER=onebot \
+ONEBOT_BASE_URL=http://127.0.0.1:3000 \
+ONEBOT_ACCESS_TOKEN=your-token \
+uv run uvicorn app.main:app --reload
+```
+
+发送失败会写入提醒日志，作业保持待提醒状态，下一轮扫描会继续重试。
 
 打开：
 
