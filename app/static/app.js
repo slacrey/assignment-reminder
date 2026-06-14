@@ -2,6 +2,7 @@ const state = {
   children: [],
   assignments: [],
   logs: [],
+  isRefreshing: false,
 };
 
 const nodes = {};
@@ -18,7 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   setDefaultReminderTime();
   refreshAll();
-  setInterval(refreshAll, 15000);
+  setInterval(refreshAll, 3000);
 });
 
 function bindNodes() {
@@ -205,13 +206,21 @@ async function cancelAssignment(id) {
 }
 
 async function refreshAll() {
-  const results = await Promise.allSettled([
-    loadChildren(),
-    loadAssignments(),
-    loadReminderLogs(),
-  ]);
-  const ok = results.every((result) => result.status === "fulfilled" && result.value);
-  nodes.lastUpdated.textContent = ok ? shortTime() : "部分失败";
+  if (state.isRefreshing) {
+    return;
+  }
+  state.isRefreshing = true;
+  try {
+    const results = await Promise.allSettled([
+      loadChildren(),
+      loadAssignments(),
+      loadReminderLogs(),
+    ]);
+    const ok = results.every((result) => result.status === "fulfilled" && result.value);
+    nodes.lastUpdated.textContent = ok ? shortTime() : "部分失败";
+  } finally {
+    state.isRefreshing = false;
+  }
 }
 
 async function fetchJson(url, options = {}) {

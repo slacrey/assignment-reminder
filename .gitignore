@@ -4,3 +4,8 @@
 __pycache__/
 *.py[cod]
 data/
+.env
+.env.local
+.env.*.local
+.env.napcat
+.idea

@@ -32,13 +32,10 @@ def _database_path(request: Request) -> Path:
 
 
 def build_message(child_name: str, title: str, description: str) -> str:
-    lines = [
-        f"作业提醒：{child_name}，现在该写作业了。",
-        f"作业：{title}",
-    ]
+    message = f"{child_name}，现在该写{title}了"
     if description:
-        lines.append(f"说明：{description}")
-    return "\n".join(lines)
+        message = f"{message}，{description}。"
+    return f"{message}。"
 
 
 def _due_assignments(database_path: str | Path, now_iso: str) -> list[sqlite3.Row]:

@@ -120,8 +120,13 @@ def assignment_statuses(database_path):
 def test_build_message_omits_empty_description():
     message = reminders.build_message("小明", "数学练习", "")
 
-    assert message == "作业提醒：小明，现在该写作业了。\n作业：数学练习"
-    assert "说明：" not in message
+    assert message == "小明，现在该写数学练习了。"
+
+
+def test_build_message_includes_description_inline():
+    message = reminders.build_message("陈琦榕", "数学作业", "感觉做")
+
+    assert message == "陈琦榕，现在该写数学作业了，感觉做。"
 
 
 def test_process_due_reminders_marks_assignment_and_writes_log(tmp_path):
