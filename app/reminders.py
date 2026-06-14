@@ -73,9 +73,9 @@ def _insert_failed_log(
             """
             INSERT INTO reminder_logs (
               assignment_id, child_id, target_qq, message, scheduled_at,
-              sent_at, status, error_message, created_at
+              sent_at, provider, provider_message_id, status, error_message, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, 'failed', ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?)
             """,
             (
                 assignment["id"],
@@ -84,6 +84,8 @@ def _insert_failed_log(
                 message,
                 assignment["remind_at"],
                 sent_at,
+                "simulated",
+                None,
                 str(error),
                 sent_at,
             ),
@@ -119,9 +121,9 @@ def process_due_reminders(database_path: str | Path, now: datetime | None = None
                     """
                     INSERT INTO reminder_logs (
                       assignment_id, child_id, target_qq, message, scheduled_at,
-                      sent_at, status, error_message, created_at
+                      sent_at, provider, provider_message_id, status, error_message, created_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, 'success', NULL, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'success', NULL, ?)
                     """,
                     (
                         assignment["id"],
@@ -130,6 +132,8 @@ def process_due_reminders(database_path: str | Path, now: datetime | None = None
                         message,
                         assignment["remind_at"],
                         sent_at,
+                        "simulated",
+                        None,
                         sent_at,
                     ),
                 )
@@ -169,6 +173,8 @@ def list_reminder_logs(request: Request) -> list[ReminderLogRead]:
               rl.message,
               rl.scheduled_at,
               rl.sent_at,
+              rl.provider,
+              rl.provider_message_id,
               rl.status,
               rl.error_message,
               rl.created_at

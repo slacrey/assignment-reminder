@@ -139,6 +139,8 @@ class ReminderLogRead(BaseModel):
     message: str
     scheduled_at: str
     sent_at: str
+    provider: str
+    provider_message_id: str | None
     status: str
     error_message: str | None
     created_at: str

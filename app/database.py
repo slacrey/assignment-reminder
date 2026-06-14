@@ -51,6 +51,8 @@ def init_db(database_path: str | Path) -> None:
               message TEXT NOT NULL,
               scheduled_at TEXT NOT NULL,
               sent_at TEXT NOT NULL,
+              provider TEXT NOT NULL DEFAULT 'simulated',
+              provider_message_id TEXT,
               status TEXT NOT NULL CHECK (status IN ('success', 'failed')),
               error_message TEXT,
               created_at TEXT NOT NULL
@@ -63,3 +65,24 @@ def init_db(database_path: str | Path) -> None:
             ON reminder_logs (created_at);
             """
         )
+        _ensure_column(
+            connection,
+            "reminder_logs",
+            "provider",
+            "TEXT NOT NULL DEFAULT 'simulated'",
+        )
+        _ensure_column(connection, "reminder_logs", "provider_message_id", "TEXT")
+
+
+def _ensure_column(
+    connection: sqlite3.Connection,
+    table_name: str,
+    column_name: str,
+    definition: str,
+) -> None:
+    columns = {
+        row["name"]
+        for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name not in columns:
+        connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")

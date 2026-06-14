@@ -21,6 +21,12 @@ def index_names(database_path, table_name):
     return {row[1] for row in rows}
 
 
+def column_names(database_path, table_name):
+    with sqlite3.connect(database_path) as connection:
+        rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return {row[1] for row in rows}
+
+
 def foreign_keys(database_path, table_name):
     with sqlite3.connect(database_path) as connection:
         rows = connection.execute(f"PRAGMA foreign_key_list({table_name})").fetchall()
@@ -63,6 +69,43 @@ def test_connect_context_manager_closes_connection(tmp_path):
         assert "closed" in str(error)
     else:
         raise AssertionError("connection should be closed after leaving context manager")
+
+
+def test_reminder_logs_include_provider_metadata(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+
+    init_db(database_path)
+
+    assert {"provider", "provider_message_id"}.issubset(
+        column_names(database_path, "reminder_logs")
+    )
+
+
+def test_init_db_migrates_existing_reminder_logs_table(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE reminder_logs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              assignment_id INTEGER NOT NULL,
+              child_id INTEGER NOT NULL,
+              target_qq TEXT NOT NULL,
+              message TEXT NOT NULL,
+              scheduled_at TEXT NOT NULL,
+              sent_at TEXT NOT NULL,
+              status TEXT NOT NULL CHECK (status IN ('success', 'failed')),
+              error_message TEXT,
+              created_at TEXT NOT NULL
+            )
+            """
+        )
+
+    init_db(database_path)
+
+    assert {"provider", "provider_message_id"}.issubset(
+        column_names(database_path, "reminder_logs")
+    )
 
 
 def test_schema_enforces_assignment_status_check(tmp_path):

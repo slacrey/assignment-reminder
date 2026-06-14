@@ -20,6 +20,8 @@ REMINDER_LOG_KEYS = {
     "message",
     "scheduled_at",
     "sent_at",
+    "provider",
+    "provider_message_id",
     "status",
     "error_message",
     "created_at",
@@ -81,6 +83,8 @@ def test_process_due_reminders_marks_assignment_and_writes_log(tmp_path):
     assert logs[0]["target_qq"] == "123456"
     assert logs[0]["assignment_title"] == "数学练习"
     assert logs[0]["status"] == "success"
+    assert logs[0]["provider"] == "simulated"
+    assert logs[0]["provider_message_id"] is None
     assert logs[0]["error_message"] is None
     assert logs[0]["sent_at"].endswith("+00:00")
     assert "数学练习" in logs[0]["message"]
